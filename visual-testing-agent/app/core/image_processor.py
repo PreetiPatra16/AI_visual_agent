@@ -3,6 +3,9 @@ import numpy as np
 import base64
 import uuid
 import pytesseract
+pytesseract.pytesseract.tesseract_cmd = (
+    r"C:\Program Files\Tesseract-OCR\tesseract.exe"
+)
 
 from datetime import datetime, timezone
 from typing import Optional

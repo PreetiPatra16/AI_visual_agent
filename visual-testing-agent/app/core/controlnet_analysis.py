@@ -1,7 +1,11 @@
 import cv2
 import numpy as np
+
 from PIL import Image
 
+# ====================================================
+# STRUCTURE MAP
+# ====================================================
 
 def generate_structure_map(image_np):
 
