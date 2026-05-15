@@ -29,15 +29,19 @@ from app.core.sam_analysis import (
 # CONFIG
 # ====================================================
 
-MIN_CONTOUR_AREA = 200
+# ====================================================
+# DETECTION CONFIG
+# ====================================================
 
-MIN_WIDTH = 40
-MIN_HEIGHT = 40
+MIN_CONTOUR_AREA = 60
 
-MAX_ASPECT_RATIO = 10
-MIN_ASPECT_RATIO = 0.1
+MIN_WIDTH = 12
+MIN_HEIGHT = 12
 
-MERGE_DISTANCE = 60
+MAX_ASPECT_RATIO = 15
+MIN_ASPECT_RATIO = 0.05
+
+MERGE_DISTANCE = 28
 
 # ====================================================
 # IMAGE LOADING
@@ -196,6 +200,10 @@ def align_images(
 # DIFFERENCE DETECTION
 # ====================================================
 
+# ====================================================
+# DIFFERENCE DETECTION
+# ====================================================
+
 def detect_difference(
     img1,
     img2
@@ -221,40 +229,64 @@ def detect_difference(
         np.clip(diff, 0, 1) * 255
     ).astype("uint8")
 
+    # --------------------------------------------
+    # LIGHT BLUR
+    # --------------------------------------------
+
     diff = cv2.GaussianBlur(
         diff,
-        (5, 5),
+        (3, 3),
         0
     )
 
+    # --------------------------------------------
+    # THRESHOLD
+    # --------------------------------------------
+
     thresh = cv2.threshold(
+
         diff,
-        0,
+
+        15,
+
         255,
+
         cv2.THRESH_BINARY_INV |
         cv2.THRESH_OTSU
+
     )[1]
 
+    # --------------------------------------------
+    # SMALLER KERNEL
+    # PRESERVE SMALL SYMBOLS
+    # --------------------------------------------
+
     kernel = np.ones(
-        (5, 5),
+        (3, 3),
         np.uint8
     )
 
     thresh = cv2.morphologyEx(
+
         thresh,
+
         cv2.MORPH_CLOSE,
+
         kernel,
-        iterations=2
+
+        iterations=1
     )
 
     thresh = cv2.dilate(
+
         thresh,
+
         kernel,
-        iterations=2
+
+        iterations=1
     )
 
     return thresh, score
-
 
 # ====================================================
 # MERGE NEARBY BOXES
@@ -698,6 +730,38 @@ def compare_images(
         boxes
     )
 
+# ====================================================
+# SPLIT VERY LARGE REGIONS
+# ====================================================
+
+    refined_boxes = []
+
+    for (x, y, w, h) in boxes:
+
+    # LARGE UI BLOCK
+
+        if h > 400:
+
+            step = h // 4
+
+            for i in range(4):
+
+                ny = y + (i * step)
+
+                nh = step
+
+                refined_boxes.append(
+                    (x, ny, w, nh)
+                )
+
+        else:
+
+            refined_boxes.append(
+                (x, y, w, h)
+            )
+
+    boxes = refined_boxes
+
     # ------------------------------------------------
     # OUTPUTS
     # ------------------------------------------------
@@ -720,11 +784,17 @@ def compare_images(
 
     for (x, y, w, h) in boxes:
 
-        x, y, w, h = refine_region_with_sam(
-            x,
-            y,
-            w,
-            h
+        if w < 45 or h < 45:
+
+            pass
+
+        else:
+
+            x, y, w, h = refine_region_with_sam(
+                x,
+                y,
+                w,
+                h
         )
 
         region = current[
@@ -797,17 +867,119 @@ def compare_images(
 
             color = (0, 255, 0)
 
-        # --------------------------------------------
-        # DRAW
-        # --------------------------------------------
 
-        cv2.rectangle(
-            diff_image,
-            (x, y),
-            (x+w, y+h),
-            color,
-            2
-        )
+        # ====================================================
+        # DRAW REGION
+        # ====================================================
+
+        overlay = diff_image.copy()
+
+        # IMPORTANT CHANGES
+
+        if not ignored:
+
+            cv2.rectangle(
+
+                overlay,
+
+                (x, y),
+
+                (x+w, y+h),
+
+                (0, 255, 0),
+
+                -1
+            )
+
+            cv2.addWeighted(
+
+                overlay,
+
+                0.16,
+
+                diff_image,
+
+                0.84,
+
+                0,
+
+                diff_image
+            )
+
+            cv2.rectangle(
+
+                diff_image,
+
+                (x, y),
+
+                (x+w, y+h),
+
+                (0, 255, 0),
+
+                2
+            )
+
+        # IGNORED CHANGES
+
+        else:
+
+            cv2.rectangle(
+
+                overlay,
+
+                (x, y),
+
+                (x+w, y+h),
+
+                (140, 140, 140),
+
+                -1
+            )
+
+            cv2.addWeighted(
+
+                overlay,
+
+                0.22,
+
+                diff_image,
+
+                0.78,
+
+                0,
+
+                diff_image
+            )
+
+            cv2.rectangle(
+
+                diff_image,
+
+                (x, y),
+
+                (x+w, y+h),
+
+                (120, 120, 120),
+
+                2
+            )
+
+            cv2.putText(
+
+                diff_image,
+
+                "IGNORED",
+
+                (x, y - 5),
+
+                cv2.FONT_HERSHEY_SIMPLEX,
+
+                0.5,
+
+                (120, 120, 120),
+
+                2
+            )
 
         # --------------------------------------------
         # STORE

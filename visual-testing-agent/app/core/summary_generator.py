@@ -1,169 +1,381 @@
 from collections import Counter
 
-# ----------------------------------------------------
-# POSITION DESCRIPTION
-# ----------------------------------------------------
 
-def get_position_desc(region, img_height, img_width):
+# ====================================================
+# POSITION
+# ====================================================
 
-    x = region.bounding_box.x
-    y = region.bounding_box.y
+def get_position(
+    x,
+    y,
+    img_width,
+    img_height
+):
 
-    if y < img_height * 0.2:
-        section = "header section"
+    if x < img_width * 0.3:
+        h_pos = "left"
 
-    elif y > img_height * 0.8:
-        section = "footer section"
+    elif x > img_width * 0.7:
+        h_pos = "right"
 
     else:
-        section = "main content area"
+        h_pos = "center"
 
-    return section
+    if y < img_height * 0.2:
+        v_pos = "top"
+
+    elif y > img_height * 0.8:
+        v_pos = "bottom"
+
+    else:
+        v_pos = "middle"
+
+    return f"{v_pos}-{h_pos}"
 
 
-# ----------------------------------------------------
-# SEMANTIC REGION DESCRIPTION
-# ----------------------------------------------------
+# ====================================================
+# GENERATE SUMMARY
+# ====================================================
 
-def generate_region_sentence(
-    region,
-    img_height,
-    img_width
+def generate_final_summary(
+
+    regions,
+
+    ignored_count,
+
+    img_height=None,
+
+    img_width=None,
+
+    ssim_score=None,
+
+    difference_score=None,
+
+    structure_similarity=None
 ):
 
-    label = region.label.lower()
+    summary = []
 
-    section = get_position_desc(
-        region,
-        img_height,
-        img_width
+    # =================================================
+    # HEADER
+    # =================================================
+
+    summary.append(
+        "=== STRUCTURAL VISUAL ANALYSIS REPORT ==="
     )
 
-    # TEXT CHANGES
+    summary.append("")
 
-    if "text changed" in label:
+    # =================================================
+    # METRICS
+    # =================================================
 
-        return f"Text content updated in {section}"
+    summary.append(
+        "---- Visual Similarity Metrics ----"
+    )
 
-    # CONTENT CHANGES
+    summary.append(
+        f"SSIM Similarity Score: "
+        f"{ssim_score:.4f}"
+    )
 
-    elif "content changed" in label:
+    summary.append(
+        f"Pixel Difference Score: "
+        f"{difference_score:.4f}"
+    )
 
-        return f"UI content modified in {section}"
+    summary.append(
+        f"Structural Layout Similarity: "
+        f"{structure_similarity:.4f}"
+    )
 
-    # STRUCTURE CHANGES
+    summary.append("")
 
-    elif "structure changed" in label:
-
-        return f"Layout structure modified in {section}"
-
-    # COLOR CHANGES
-
-    elif "color change" in label:
-
-        return f"Visual styling changed in {section}"
-
-    # MINOR CHANGES
-
-    elif "minor change" in label:
-
-        return f"Minor UI difference detected in {section}"
-
-    return None
-
-
-# ----------------------------------------------------
-# HEURISTIC SUMMARY
-# ----------------------------------------------------
-
-def generate_heuristic_summary(
-    regions,
-    ignored_count,
-    img_height,
-    img_width
-):
+    # =================================================
+    # REGION ANALYSIS
+    # =================================================
 
     significant_regions = [
+
         r for r in regions
+
         if not r.ignored
     ]
 
-    summary_lines = []
+    ignored_regions = [
 
-    summary_lines.append(
-        "Visual comparison completed."
-    )
+        r for r in regions
 
-    meaningful = []
+        if r.ignored
+    ]
+
+    total_changed_area = 0
+
+    largest_area = 0
+
+    positions = []
 
     for region in significant_regions:
 
-        sentence = generate_region_sentence(
-            region,
-            img_height,
-            img_width
+        box = region.bounding_box
+
+        area = (
+            box.width
+            * box.height
         )
 
-        if sentence:
+        total_changed_area += area
 
-            meaningful.append(sentence)
+        largest_area = max(
+            largest_area,
+            area
+        )
 
-    # REMOVE DUPLICATES
+        positions.append(
 
-    meaningful = list(
-        dict.fromkeys(meaningful)
+            get_position(
+                box.x,
+                box.y,
+                img_width,
+                img_height
+            )
+        )
+
+    avg_area = 0
+
+    if significant_regions:
+
+        avg_area = (
+            total_changed_area
+            / len(significant_regions)
+        )
+
+    # =================================================
+    # STRUCTURAL METRICS
+    # =================================================
+
+    summary.append(
+        "---- Structural Change Metrics ----"
     )
 
-    if meaningful:
+    summary.append(
+        f"Total Significant Regions: "
+        f"{len(significant_regions)}"
+    )
 
-        summary_lines.append(
-            f"{len(meaningful)} meaningful UI changes found:"
-        )
+    summary.append(
+        f"Ignored Dynamic Regions: "
+        f"{len(ignored_regions)}"
+    )
 
-        for i, sentence in enumerate(
-            meaningful[:5],
-            start=1
-        ):
+    summary.append(
+        f"Total Changed Area: "
+        f"{total_changed_area}px"
+    )
 
-            summary_lines.append(
-                f"{i}. {sentence}"
+    summary.append(
+        f"Largest Region Area: "
+        f"{largest_area}px"
+    )
+
+    summary.append(
+        f"Average Region Area: "
+        f"{int(avg_area)}px"
+    )
+
+    summary.append("")
+
+    # =================================================
+    # REGION DISTRIBUTION
+    # =================================================
+
+    summary.append(
+        "---- UI Distribution Analysis ----"
+    )
+
+    if positions:
+
+        counts = Counter(positions)
+
+        for pos, count in counts.items():
+
+            summary.append(
+                f"{count} modified region(s) "
+                f"detected in the "
+                f"{pos} section"
             )
 
     else:
 
-        summary_lines.append(
-            "No meaningful UI differences found."
+        summary.append(
+            "No significant UI distribution changes detected."
         )
 
-    if ignored_count > 0:
+    summary.append("")
 
-        summary_lines.append(
-            f"{ignored_count} dynamic regions ignored."
-        )
+    # =================================================
+    # COMPLEXITY ANALYSIS
+    # =================================================
 
-    return "\n".join(summary_lines)
-
-
-# ----------------------------------------------------
-# FINAL SUMMARY
-# ----------------------------------------------------
-
-def generate_final_summary(
-    regions,
-    ignored_count,
-    img_height=None,
-    img_width=None
-):
-
-    if img_height is None:
-        img_height = 1000
-
-    if img_width is None:
-        img_width = 1000
-
-    return generate_heuristic_summary(
-        regions,
-        ignored_count,
-        img_height,
-        img_width
+    summary.append(
+        "---- Structural Complexity Analysis ----"
     )
+
+    if structure_similarity > 0.90:
+
+        complexity = (
+            "Minimal structural deviation"
+        )
+
+    elif structure_similarity > 0.75:
+
+        complexity = (
+            "Moderate structural modification"
+        )
+
+    else:
+
+        complexity = (
+            "High structural divergence"
+        )
+
+    summary.append(
+        f"Layout Complexity Assessment: "
+        f"{complexity}"
+    )
+
+    # ------------------------------------------------
+
+    if total_changed_area > 200000:
+
+        density = "High"
+
+    elif total_changed_area > 80000:
+
+        density = "Moderate"
+
+    else:
+
+        density = "Low"
+
+    summary.append(
+        f"Visual Change Density: "
+        f"{density}"
+    )
+
+    # ------------------------------------------------
+
+    if significant_regions:
+
+        summary.append(
+            "Detected UI modifications "
+            "are concentrated in localized "
+            "interface sections rather than "
+            "spread across the entire layout."
+        )
+
+    else:
+
+        summary.append(
+            "No meaningful structural "
+            "layout changes detected."
+        )
+
+    summary.append("")
+
+    # =================================================
+    # CONTROLNET ANALYSIS
+    # =================================================
+
+    summary.append(
+        "---- ControlNet Structural Interpretation ----"
+    )
+
+    if structure_similarity < 0.70:
+
+        summary.append(
+            "Significant structural "
+            "variation detected between "
+            "baseline and current layouts."
+        )
+
+    elif structure_similarity < 0.90:
+
+        summary.append(
+            "Moderate layout-level "
+            "structural modifications detected."
+        )
+
+    else:
+
+        summary.append(
+            "Layout structure remains "
+            "highly consistent between "
+            "both UI versions."
+        )
+
+    if significant_regions:
+
+        summary.append(
+            "Structural edge-map analysis "
+            "indicates new interface "
+            "components or layout expansion "
+            "within the modified regions."
+        )
+
+    summary.append("")
+
+    # =================================================
+    # IGNORED REGIONS
+    # =================================================
+
+    if ignored_regions:
+
+        summary.append(
+            "---- Ignored Dynamic Regions ----"
+        )
+
+        for i, region in enumerate(
+
+            ignored_regions,
+
+            start=1
+        ):
+
+            box = region.bounding_box
+
+            summary.append(
+                f"{i}. Dynamic region ignored "
+                f"at x={box.x}, "
+                f"y={box.y}, "
+                f"size={box.width}x{box.height}"
+            )
+
+        summary.append("")
+
+    # =================================================
+    # FINAL SYSTEM INSIGHT
+    # =================================================
+
+    summary.append(
+        "---- System-Level Structural Insight ----"
+    )
+
+    if significant_regions:
+
+        summary.append(
+            "The detected visual modifications "
+            "primarily affect localized UI "
+            "workflow sections while preserving "
+            "overall application layout stability."
+        )
+
+    else:
+
+        summary.append(
+            "The compared interfaces remain "
+            "structurally consistent with "
+            "minimal semantic deviation."
+        )
+
+    return "\n".join(summary)
